@@ -14,11 +14,11 @@ import javax0.repl.Repl;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 
 import static javax0.repl.CommandDefinitionBuilder.start;
 
@@ -61,7 +61,7 @@ public class App {
             .executor(this::feature)
     ).command(
         start().
-            kw("licenseLoad").parameters(Set.of(FORMAT, CONFIRM))
+            kw("licenseLoad").parameters(new HashSet<>(Arrays.asList(FORMAT, CONFIRM)))
                     .usage("licenseLoad [format=TEXT*|BINARY|BASE64] fileName")
                     .help("Load a license from a file to memory. Default assumption is that the license is TEXT format.\n" +
                             "Use the parameter 'format' if the license was saved BINARY or BASE64.\n")
@@ -99,7 +99,7 @@ public class App {
                     .executor(this::sign)
     ).command(
             start().
-                    kw("generateKeys").parameters(Set.of(ALGORITHM, SIZE, FORMAT, PUBLIC_KEY_FILE, PRIVATE_KEY_FILE))
+                    kw("generateKeys").parameters(new HashSet<>(Arrays.asList(ALGORITHM, SIZE, FORMAT, PUBLIC_KEY_FILE, PRIVATE_KEY_FILE)))
                     .usage("generateKeys [algorithm=RSA/ECB/PKCS1Padding] [size=2048] [format=BINARY*|BASE64] public=xxx private=xxx")
                     .help("Generate public and private keys and save them into files.\n" +
                             "You can specify the algorithm, key size and the format. The defaults are RSA/ECB/PKCS1Padding, 2048 and BINARY.\n" +
@@ -154,11 +154,11 @@ public class App {
     }
 
     private void stateReporter(CommandEnvironment env) {
-        final var w = env.console().writer();
+        final PrintWriter w = env.console().writer();
         if (license == null) {
             w.print("No license in memory\n");
         } else {
-            final var owner = license.get("owner");
+            final Feature owner = license.get("owner");
             if (owner == null) {
                 w.print("License w/o owner is in memory.\n");
             } else {
@@ -192,8 +192,8 @@ public class App {
             return;
         }
         try {
-            final var baos = new ByteArrayOutputStream();
-            final var reader = new LicenseWriter(baos);
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            final LicenseWriter reader = new LicenseWriter(baos);
             reader.write(license, IOFormat.STRING);
             env.message().info("License:\n" + new String(baos.toByteArray(), StandardCharsets.UTF_8));
         } catch (IOException e) {
@@ -208,9 +208,10 @@ public class App {
             return;
         }
         try {
-            final var fileName = getLicenseFileName(env);
-            final var reader = new LicenseWriter(fileName);
-            final var format = env.parser().getOrDefault(FORMAT, TEXT, Set.of(TEXT, BINARY, BASE_64));
+            final String fileName = getLicenseFileName(env);
+            final LicenseWriter reader = new LicenseWriter(fileName);
+            final Set<String> values = new HashSet<>(Arrays.asList(FORMAT, CONFIRM));
+            final String format = env.parser().getOrDefault(FORMAT, TEXT, values);
             switch (format) {
                 case TEXT:
                     reader.write(license, IOFormat.STRING);
@@ -236,15 +237,15 @@ public class App {
         if (keyPair != null && keyPair.getPair() != null && keyPair.getPair().getPrivate() != null) {
             env.message().info("Overriding old key from file");
         }
-        final var keyFile = env.parser().get(0);
-        if (keyFile.isEmpty()) {
+        final Optional<String> keyFile = env.parser().get(0);
+        if (keyFile == null || keyFile.get() == null || keyFile.get().length() <= 0) {
             env.message().error("keyFile has to be specified from where the key is loaded");
             return;
         }
-        final var format = IOFormat.valueOf(env.parser().getOrDefault(FORMAT, BINARY, Set.of(BASE_64, BINARY)));
-        try (final var reader = new KeyPairReader(keyFile.get())) {
+        final IOFormat format = IOFormat.valueOf(env.parser().getOrDefault(FORMAT, BINARY, new HashSet<>(Arrays.asList(BASE_64, BINARY))));
+        try (final KeyPairReader reader = new KeyPairReader(keyFile.get())) {
             keyPair = merge(keyPair, reader.readPrivate(format));
-            final var keyPath = new File(keyFile.get()).getAbsolutePath();
+            final String keyPath = new File(keyFile.get()).getAbsolutePath();
             env.message().info("Private key loaded from" + keyPath);
         } catch (Exception e) {
             env.message().error("An exception occurred loading the key: " + e);
@@ -256,15 +257,15 @@ public class App {
         if (keyPair != null && keyPair.getPair() != null && keyPair.getPair().getPrivate() != null) {
             env.message().info("Overriding old key from file");
         }
-        final var keyFile = env.parser().get(0);
-        if (keyFile.isEmpty()) {
+        final Optional<String> keyFile = env.parser().get(0);
+        if (keyFile == null || keyFile.get() == null || keyFile.get().length() <= 0) {
             env.message().error("keyFile has to be specified from where the key is loaded");
             return;
         }
-        final var format = IOFormat.valueOf(env.parser().getOrDefault(FORMAT, BINARY, Set.of(BASE_64, BINARY)).toUpperCase());
-        try (final var reader = new KeyPairReader(keyFile.get())) {
+        final IOFormat format = IOFormat.valueOf(env.parser().getOrDefault(FORMAT, BINARY, new HashSet<>(Arrays.asList(BASE_64, BINARY))).toUpperCase());
+        try (final KeyPairReader reader = new KeyPairReader(keyFile.get())) {
             keyPair = merge(keyPair, reader.readPublic(format));
-            final var keyPath = new File(keyFile.get()).getAbsolutePath();
+            final String keyPath = new File(keyFile.get()).getAbsolutePath();
             env.message().info("Public key loaded from" + keyPath);
         } catch (Exception e) {
             env.message().error("An exception occurred loading the keys: " + e);
@@ -276,7 +277,7 @@ public class App {
         if (oldKp == null) {
             return newKp;
         }
-        final var cipher = oldKp.cipher();
+        final String cipher = oldKp.cipher();
         if (newKp.getPair().getPublic() != null) {
             return LicenseKeyPair.Create.from(newKp.getPair().getPublic(), oldKp.getPair().getPrivate(), cipher);
         }
@@ -292,10 +293,10 @@ public class App {
                 env.message().error("There is no public key loaded");
                 return;
             }
-            final var key = keyPair.getPublic();
-            final var md = MessageDigest.getInstance("SHA-512");
-            final var calculatedDigest = md.digest(key);
-            final var javaCode = new StringBuilder("--KEY DIGEST START\nbyte [] digest = new byte[] {\n");
+            final byte[] key = keyPair.getPublic();
+            final MessageDigest md = MessageDigest.getInstance("SHA-512");
+            final byte[] calculatedDigest = md.digest(key);
+            final StringBuilder javaCode = new StringBuilder("--KEY DIGEST START\nbyte [] digest = new byte[] {\n");
             for (int i = 0; i < calculatedDigest.length; i++) {
                 int intVal = ((int) calculatedDigest[i]) & 0xff;
                 javaCode.append(String.format("(byte)0x%02X, ", intVal));
@@ -322,12 +323,12 @@ public class App {
     }
 
     private void generate(CommandEnvironment env) {
-        final var algorithm = env.parser().getOrDefault(ALGORITHM, "RSA");
-        final var sizeString = env.parser().getOrDefault(SIZE, "2048");
-        final var format = IOFormat.valueOf(env.parser().getOrDefault(FORMAT, BINARY));
-        final var publicKeyFile = env.parser().get(PUBLIC_KEY_FILE);
-        final var privateKeyFile = env.parser().get(PRIVATE_KEY_FILE);
-        if (publicKeyFile.isEmpty() || privateKeyFile.isEmpty()) {
+        final String algorithm = env.parser().getOrDefault(ALGORITHM, "RSA");
+        final String sizeString = env.parser().getOrDefault(SIZE, "2048");
+        final IOFormat format = IOFormat.valueOf(env.parser().getOrDefault(FORMAT, BINARY));
+        final Optional<String> publicKeyFile = env.parser().get(PUBLIC_KEY_FILE);
+        final Optional<String> privateKeyFile = env.parser().get(PRIVATE_KEY_FILE);
+        if (publicKeyFile == null || publicKeyFile.get() == null || privateKeyFile == null || privateKeyFile.get() == null) {
             env.message().error("Keypair generation needs output files specified where keys are to be saved. " +
                     "Use options 'publicKeyFile' and 'privateKeyFile'");
             return;
@@ -341,9 +342,9 @@ public class App {
             return;
         }
         generateKeys(algorithm, size);
-        try (final var writer = new KeyPairWriter(privateKeyFile.get(), publicKeyFile.get())) {
+        try (final KeyPairWriter writer = new KeyPairWriter(privateKeyFile.get(), publicKeyFile.get())) {
             writer.write(keyPair, format);
-            final var privateKeyPath = new File(privateKeyFile.get()).getAbsolutePath();
+            final String privateKeyPath = new File(privateKeyFile.get()).getAbsolutePath();
             env.message().info("Private key saved to " + privateKeyPath);
             env.message().info("Public key saved to " + new File(publicKeyFile.get()).getAbsolutePath());
         } catch (IOException e) {
@@ -369,7 +370,7 @@ public class App {
 
     private void sign(CommandEnvironment env) {
         try {
-            final var digest = env.parser().getOrDefault("digest", "SHA-512");
+            final String digest = env.parser().getOrDefault("digest", "SHA-512");
             if (license == null) {
                 env.message().error("There is no license loaded to be signed");
             } else {
@@ -391,7 +392,7 @@ public class App {
 
     private void newLicense(CommandEnvironment env) {
         if (licenseToSave) {
-            if (env.parser().get(CONFIRM, Set.of("yes")).isPresent()) {
+            if (env.parser().get(CONFIRM, new HashSet<>(Arrays.asList("yes"))).isPresent()) {
                 licenseToSave = false;
             } else {
                 env.message().error("There is an unsaved license in memory. Use 'newLicense confirm=yes'");
@@ -403,13 +404,13 @@ public class App {
 
     private void loadLicense(CommandEnvironment env) {
         if (licenseToSave) {
-            if (env.parser().get(CONFIRM, Set.of("yes")).isPresent()) {
+            if (env.parser().get(CONFIRM, new HashSet<>(Arrays.asList("yes"))).isPresent()) {
                 env.message().error("There is an unsaved license in memory. Use 'newLicense confirm=yes'");
                 return;
             }
         }
-        try (final var reader = new LicenseReader(getLicenseFileName(env))) {
-            final String format = env.parser().getOrDefault(FORMAT, TEXT, Set.of(TEXT, BINARY, BASE_64));
+        try (final LicenseReader reader = new LicenseReader(getLicenseFileName(env))) {
+            final String format = env.parser().getOrDefault(FORMAT, TEXT, new HashSet<>(Arrays.asList(TEXT, BINARY, BASE_64)));
             switch (format) {
                 case TEXT:
                     license = reader.read(IOFormat.STRING);
