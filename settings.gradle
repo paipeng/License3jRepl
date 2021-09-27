@@ -3,3 +3,8 @@
  */
 
 rootProject.name = 'License3jrepl'
+
+include 'repl'
+
+
+project(':repl').projectDir = new File('../repl/')

@@ -3,8 +3,9 @@
  */
 
 plugins {
-    id 'java'
+    id 'java-library'
     id 'maven-publish'
+    id 'application'
 }
 
 repositories {
@@ -15,8 +16,9 @@ repositories {
 }
 
 dependencies {
+    implementation project(':repl')
     implementation 'com.javax0.license3j:license3j:3.1.5'
-    implementation 'com.javax0.repl:repl:1.1.0'
+    //implementation 'com.javax0.repl:repl:1.1.0'
 }
 
 group = 'com.javax0.license3j'
@@ -39,4 +41,27 @@ publishing {
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
+}
+
+
+mainClassName = 'javax0.license3jrepl.App'
+
+project.configurations.implementation.setCanBeResolved(true)
+task fatJar(type: Jar) {
+    println "my fatjar"
+    manifest {
+        attributes 'Main-Class': 'javax0.license3jrepl.App',
+                'Class-Path': configurations.implementation.collect { "$it.name" }.join(' ')
+    }
+
+    baseName = project.name + '-all'
+    from {
+        configurations.implementation.collect {
+            if (!it.toString().contains("sources") && !it.toString().contains("junit") && !it.toString().contains("ant") ) {
+                println it.getName()
+                it.isDirectory() ? it : zipTree(it)
+            }
+        }
+    }
+    with jar
 }
