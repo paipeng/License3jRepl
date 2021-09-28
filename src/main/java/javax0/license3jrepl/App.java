@@ -210,7 +210,7 @@ public class App {
         try {
             final String fileName = getLicenseFileName(env);
             final LicenseWriter reader = new LicenseWriter(fileName);
-            final Set<String> values = new HashSet<>(Arrays.asList(FORMAT, CONFIRM));
+            final Set<String> values = new HashSet<>(Arrays.asList(TEXT, BINARY, BASE_64));
             final String format = env.parser().getOrDefault(FORMAT, TEXT, values);
             switch (format) {
                 case TEXT:
